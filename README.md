@@ -23,6 +23,8 @@ enquanto houver só um). Cada período tem até quatro abas:
   plataformas, distribuição de verba e resultados, e os destaques do mês
 - **Google Ads** — KPIs, tabela de campanhas e gráficos de investimento e leads
 - **Meta Ads** — KPIs, tabela de campanhas e gráficos de investimento e conversas
+- **Palavras-chave** — termos da rede de pesquisa, com status, custo, CPC e
+  conversão por palavra
 - **Todas as Campanhas** — as duas tabelas completas, lado a lado
 
 Abas sem dado não são renderizadas: um período só com Google não mostra a aba de
@@ -102,6 +104,28 @@ técnica.
 
 Meta — `nome`, `invest` e `conversas` são obrigatórios; `impressoes` e `alcance`
 são opcionais.
+
+### Palavras-chave
+
+O bloco `palavras` é opcional e cria a aba correspondente. Só `termo`,
+`impressoes`, `cliques`, `custo` e `conversoes` são digitados — CTR, CPC e custo
+por conversão saem daí:
+
+```js
+palavras: {
+  sub: '16 palavras-chave · correspondência de frase.',
+  kpis: [ /* três KPIs */ ],
+  itens: [
+    { termo: 'psicólogo particular são paulo', estado: 'Ativado', motivo: '',
+      impressoes: 1513, cliques: 69, custo: 465.68, conversoes: 1 }
+  ],
+  insights: [ /* opcional */ ],
+  nota: 'Fonte do export.'
+}
+```
+
+`estado: 'Pausado'` mostra o selo âmbar; `motivo` contendo "raramente exibido"
+mostra o selo cinza. Qualquer outro caso aparece como "Ativa".
 
 Use **ponto** como separador decimal (`1723.80`), não vírgula. A formatação
 pt-BR é aplicada na hora de exibir.

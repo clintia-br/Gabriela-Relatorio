@@ -34,6 +34,7 @@
   /* Uma plataforma só entra no relatório se tiver campanha com veiculação. */
   const temGoogle = (m) => !!(m.google && m.google.campanhas && m.google.campanhas.length);
   const temMeta   = (m) => !!(m.meta   && m.meta.campanhas   && m.meta.campanhas.length);
+  const temPalavras = (m) => !!(m.palavras && m.palavras.itens && m.palavras.itens.length);
 
   const plural = (n, singular, plural_) => num(n) + ' ' + (Math.round(n) === 1 ? singular : plural_);
 
@@ -340,6 +341,78 @@
     </div></section>`;
   }
 
+
+  /* ── aba: Palavras-chave ────────────────────────────────────────────────
+     Só CTR, CPC e custo/conv. são derivados; impressões, cliques, custo e
+     conversões vêm do export. */
+  function secPalavras(m) {
+    const itens = m.palavras.itens.slice().sort((a, b) => (b.custo - a.custo) || (b.impressoes - a.impressoes));
+    const t = {
+      impressoes: soma(itens, 'impressoes'), cliques: soma(itens, 'cliques'),
+      custo: soma(itens, 'custo'), conversoes: soma(itens, 'conversoes')
+    };
+
+    const selo = (k) => {
+      if (k.estado === 'Pausado') return '<span class="chip warn">Pausado</span>';
+      if (/raramente/i.test(k.motivo || '')) return '<span class="chip mut">Raramente exibido</span>';
+      return '<span class="chip">Ativa</span>';
+    };
+    const taxa = (c, cl) => cl ? pct((c / cl) * 100) : '—';
+
+    const linhas = itens.map((k) => `<tr>
+      <td class="termo">${esc(k.termo)}</td>
+      <td>${selo(k)}</td>
+      <td class="r">${num(k.impressoes)}</td>
+      <td class="r">${num(k.cliques)}</td>
+      <td class="r">${k.impressoes ? pct((k.cliques / k.impressoes) * 100) : '—'}</td>
+      <td class="r">${k.cliques ? brl(k.custo / k.cliques) : '—'}</td>
+      <td class="r">${brl(k.custo)}</td>
+      <td class="r">${num(k.conversoes)}</td>
+      <td class="r">${k.conversoes ? brl(k.custo / k.conversoes) : '—'}</td>
+    </tr>`).join('');
+
+    const comCusto = itens.filter((k) => k.custo > 0);
+
+    return `<section id="${m.id}-palavras" class="sec"><div class="wrap">
+      ${cabecalho(m, { eyebrow: `Palavras-chave · ${m.rotulo}`, titulo: 'Rede de Pesquisa', sub: m.palavras.sub })}
+      ${alertasHTML(m.palavras.alertas)}
+      ${kpisHTML(m.palavras.kpis, 'go')}
+      <div class="tcard">
+        <div class="tcard-hdr">
+          <span class="tcard-ttl">Detalhamento por Palavra-chave</span>
+          <span class="chip">ordenado por custo ↓</span>
+        </div>
+        <div class="tbl-scroll"><table>
+          <thead><tr>
+            <th>Palavra-chave</th><th>Status</th><th class="r">Impr.</th><th class="r">Cliques</th>
+            <th class="r">CTR</th><th class="r">CPC</th><th class="r">Custo</th>
+            <th class="r">Conv.</th><th class="r">Custo / conv.</th>
+          </tr></thead>
+          <tbody>${linhas}</tbody>
+          <tfoot><tr>
+            <td>Total · ${plural(itens.length, 'palavra-chave', 'palavras-chave')}</td><td></td>
+            <td class="r">${num(t.impressoes)}</td>
+            <td class="r">${num(t.cliques)}</td>
+            <td class="r">${t.impressoes ? pct((t.cliques / t.impressoes) * 100) : '—'}</td>
+            <td class="r">${t.cliques ? brl(t.custo / t.cliques) : '—'}</td>
+            <td class="r">${brl(t.custo)}</td>
+            <td class="r">${num(t.conversoes)}</td>
+            <td class="r">${t.conversoes ? brl(t.custo / t.conversoes) : '—'}</td>
+          </tr></tfoot>
+        </table></div>
+        ${barrasHTML('Custo por Palavra-chave', comCusto.map((k) => ({ nome: k.termo, valor: k.custo })), 'google', (v) => brl(v, 0))}
+        ${barrasHTML('Cliques por Palavra-chave', comCusto.map((k) => ({ nome: k.termo, valor: k.cliques })), 'teal', (v) => plural(v, 'clique', 'cliques'))}
+        ${notaHTML(m.palavras.nota)}
+      </div>
+      ${m.palavras.insights ? `<div class="insights">${m.palavras.insights.map((i) => `
+        <div class="insight">
+          <div class="ins-icon">${i.icone || ''}</div>
+          <div class="ins-ttl">${esc(i.titulo)}</div>
+          <div class="ins-txt">${esc(i.texto)}</div>
+        </div>`).join('')}</div>` : ''}
+    </div></section>`;
+  }
+
   /* ── montagem ────────────────────────────────────────────────────────── */
   function mesHTML(m, i) {
     // só entram as abas que têm dado: um período sem Meta não mostra a aba de
@@ -347,6 +420,7 @@
     const abas = [{ id: 'geral', rotulo: 'Visão Geral', html: secGeral(m) }];
     if (temGoogle(m)) abas.push({ id: 'google', rotulo: 'Google Ads', html: secGoogle(m) });
     if (temMeta(m))   abas.push({ id: 'meta',   rotulo: 'Meta Ads',   html: secMeta(m) });
+    if (temPalavras(m)) abas.push({ id: 'palavras', rotulo: 'Palavras-chave', html: secPalavras(m) });
     if (temGoogle(m) && temMeta(m)) abas.push({ id: 'todas', rotulo: 'Todas as Campanhas', html: secTodas(m) });
 
     return `<div id="report-${m.id}" class="relatorio-mes"${i === 0 ? '' : ' style="display:none"'}>
