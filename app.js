@@ -31,6 +31,12 @@
     return s;
   }
 
+  /* Uma plataforma só entra no relatório se tiver campanha com veiculação. */
+  const temGoogle = (m) => !!(m.google && m.google.campanhas && m.google.campanhas.length);
+  const temMeta   = (m) => !!(m.meta   && m.meta.campanhas   && m.meta.campanhas.length);
+
+  const plural = (n, singular, plural_) => num(n) + ' ' + (Math.round(n) === 1 ? singular : plural_);
+
   const soma = (arr, campo) => arr.reduce((a, c) => a + (Number(c[campo]) || 0), 0);
   const tem = (arr, campo) => arr.some((c) => c[campo] != null);
 
@@ -46,13 +52,14 @@
         ? (cliques / impressoes) * 100
         : cs.reduce((a, c) => a + (c.ctr || 0) * (c.impressoes || 0), 0) / impressoes;
     }
-    return { invest, resultados: leads, custo: leads ? invest / leads : 0, impressoes, cliques, ctr };
+    // sem conversões o custo por resultado não existe; null vira '—' na tela
+    return { invest, resultados: leads, custo: leads ? invest / leads : null, impressoes, cliques, ctr };
   }
 
   function totaisMeta(cs) {
     const invest = soma(cs, 'invest'), conversas = soma(cs, 'conversas');
     return {
-      invest, resultados: conversas, custo: conversas ? invest / conversas : 0,
+      invest, resultados: conversas, custo: conversas ? invest / conversas : null,
       impressoes: soma(cs, 'impressoes'), alcance: soma(cs, 'alcance')
     };
   }
@@ -103,6 +110,7 @@
 
   /* Gráfico de barras: ordena decrescente e escala a maior barra em 100%. */
   function barrasHTML(titulo, itens, cor, formatar) {
+    if (itens.length < 2) return '';  // uma barra sozinha em 100% não compara nada
     const ord = itens.slice().sort((a, b) => b.valor - a.valor);
     const max = ord.length ? ord[0].valor : 0;
     return `<div class="chart-ttl">${esc(titulo)}</div>
@@ -136,7 +144,7 @@
         <td class="cam">${esc(c.nome)}${c.marca ? ' ' + esc(c.marca) : ''}</td>
         <td class="r">${brl(c.invest)}</td>
         <td class="r">${num(c.leads, casas)}</td>
-        <td class="r">${brl(c.invest / c.leads)}</td>
+        <td class="r">${c.leads ? brl(c.invest / c.leads) : '—'}</td>
         ${comCtr ? `<td class="r">${c.ctr != null ? pct(c.ctr) : '—'}</td>` : ''}
         ${comCliques ? `<td class="r">${c.cliques != null ? num(c.cliques) : '—'}</td>` : ''}
         ${comImpr ? `<td class="r">${c.impressoes != null ? num(c.impressoes) : '—'}</td>` : ''}
@@ -144,8 +152,8 @@
       <tfoot><tr>
         <td>Total Google Ads</td>
         <td class="r">${brl(t.invest)}</td>
-        <td class="r">${num(Math.round(t.resultados))} leads</td>
-        <td class="r">CPL ${brl(t.custo)}</td>
+        <td class="r">${plural(Math.round(t.resultados), 'lead', 'leads')}</td>
+        <td class="r">${t.custo != null ? 'CPL ' + brl(t.custo) : '—'}</td>
         ${comCtr ? `<td class="r">${t.ctr != null ? pct(t.ctr) : '—'}</td>` : ''}
         ${comCliques ? `<td class="r">${num(t.cliques)}</td>` : ''}
         ${comImpr ? `<td class="r">${num(t.impressoes)}</td>` : ''}
@@ -166,15 +174,15 @@
         <td class="cam">${esc(c.nome)}</td>
         <td class="r">${brl(c.invest)}</td>
         <td class="r">${num(c.conversas)}</td>
-        <td class="r">${brl(c.invest / c.conversas)}</td>
+        <td class="r">${c.conversas ? brl(c.invest / c.conversas) : '—'}</td>
         ${comImpr ? `<td class="r">${num(c.impressoes)}</td>` : ''}
         ${comAlc ? `<td class="r">${num(c.alcance)}</td>` : ''}
       </tr>`).join('')}</tbody>
       <tfoot><tr>
         <td>Total Meta Ads</td>
         <td class="r">${brl(t.invest)}</td>
-        <td class="r">${num(t.resultados)} conversas</td>
-        <td class="r">CPR ${brl(t.custo)}</td>
+        <td class="r">${plural(t.resultados, 'conversa', 'conversas')}</td>
+        <td class="r">${t.custo != null ? 'CPR ' + brl(t.custo) : '—'}</td>
         ${comImpr ? `<td class="r">${num(t.impressoes)}</td>` : ''}
         ${comAlc ? `<td class="r">${num(t.alcance)}</td>` : ''}
       </tr></tfoot>
@@ -183,31 +191,36 @@
 
   /* ── aba: Visão Geral ────────────────────────────────────────────────── */
   function secGeral(m) {
-    const g = totaisGoogle(m.google.campanhas), t = totaisMeta(m.meta.campanhas);
+    const g = totaisGoogle(temGoogle(m) ? m.google.campanhas : []);
+    const t = totaisMeta(temMeta(m) ? m.meta.campanhas : []);
     const invest = g.invest + t.invest, result = g.resultados + t.resultados;
-    const pInvG = (g.invest / invest) * 100, pInvM = 100 - pInvG;
-    const pResG = (g.resultados / result) * 100, pResM = 100 - pResG;
+    const pInvG = invest ? (g.invest / invest) * 100 : 0, pInvM = 100 - pInvG;
+    const pResG = result ? (g.resultados / result) * 100 : 0, pResM = 100 - pResG;
+    // comparar plataformas só faz sentido com as duas no ar; com uma só, os
+    // blocos seriam 100%/0% e não dizem nada
+    const duasPlataformas = temGoogle(m) && temMeta(m);
     const d = m.geral;
 
-    const ritmo = d.ritmoDiario ? `
+    /* Tabela de ritmo: colunas livres, definidas nos dados, porque o recorte
+       útil muda por conta (resultados/dia, impressões/dia, CTR...). A primeira
+       coluna é o rótulo do período; as demais vão alinhadas à direita. */
+    const rd = d.ritmoDiario;
+    const celulas = (l) => l.celulas
+      .map((c, n) => n === 0 ? `<td>${esc(c)}${aviso(l.aviso)}</td>` : `<td class="r">${esc(c)}</td>`)
+      .join('');
+    // um bloco malformado não pode derrubar a página inteira
+    const ritmo = (!rd || !rd.colunas || !rd.linhas) ? '' : `
       <div class="tcard">
         <div class="tcard-hdr">
-          <span class="tcard-ttl">${esc(d.ritmoDiario.titulo)}</span>
-          ${d.ritmoDiario.chip ? `<span class="chip">${esc(d.ritmoDiario.chip)}</span>` : ''}
+          <span class="tcard-ttl">${esc(rd.titulo)}</span>
+          ${rd.chip ? `<span class="chip">${esc(rd.chip)}</span>` : ''}
         </div>
         <div class="tbl-scroll"><table>
-          <thead><tr><th>Período</th><th class="r">Dias</th><th class="r">Investimento/dia</th><th class="r">Resultados/dia</th><th class="r">CPL / CPR</th></tr></thead>
-          <tbody>${d.ritmoDiario.linhas.map((l) => `<tr>
-            <td>${esc(l.periodo)}${aviso(l.aviso)}</td><td class="r">${num(l.dias)}</td>
-            <td class="r">${esc(l.investDia)}</td><td class="r">${esc(l.resultDia)}</td><td class="r">${esc(l.cpl)}</td>
-          </tr>`).join('')}</tbody>
-          <tfoot><tr>
-            <td>${esc(d.ritmoDiario.total.periodo)}</td><td class="r">${num(d.ritmoDiario.total.dias)}</td>
-            <td class="r">${esc(d.ritmoDiario.total.investDia)}</td><td class="r">${esc(d.ritmoDiario.total.resultDia)}</td>
-            <td class="r">${esc(d.ritmoDiario.total.cpl)}</td>
-          </tr></tfoot>
+          <thead><tr>${rd.colunas.map((c, n) => n === 0 ? `<th>${esc(c)}</th>` : `<th class="r">${esc(c)}</th>`).join('')}</tr></thead>
+          <tbody>${rd.linhas.map((l) => `<tr>${celulas(l)}</tr>`).join('')}</tbody>
+          ${rd.total ? `<tfoot><tr>${celulas(rd.total)}</tr></tfoot>` : ''}
         </table></div>
-      </div>` : '';
+      </div>`;
 
     const insights = (d.insights && d.insights.length) ? `
       <div class="insights">${d.insights.map((i) => `
@@ -217,13 +230,7 @@
           <div class="ins-txt">${esc(i.texto)}</div>
         </div>`).join('')}</div>` : '';
 
-    return `<section id="${m.id}-geral" class="sec on"><div class="wrap">
-      ${cabecalho(m, { eyebrow: d.eyebrow, titulo: 'Performance Geral', sub: d.sub })}
-      ${alertasHTML(d.alertas)}
-      ${kpisHTML(d.kpis, 'tc')}
-      ${ritmo}
-      ${momHTML(d.mom)}
-
+    const comparativo = !duasPlataformas ? '' : `
       <div class="tcard">
         <div class="tcard-hdr"><span class="tcard-ttl">Comparativo por Plataforma</span></div>
         <div class="tbl-scroll"><table>
@@ -231,18 +238,18 @@
           <tbody>
             <tr>
               <td><span class="plat-dot" style="background:var(--google)"></span>Google Ads${aviso(d.avisoGoogle)}</td>
-              <td class="r">${brl(g.invest)}</td><td class="r">${num(Math.round(g.resultados))} leads</td>
+              <td class="r">${brl(g.invest)}</td><td class="r">${plural(Math.round(g.resultados), 'lead', 'leads')}</td>
               <td class="r">${brl(g.custo)}</td><td class="r">${pct(pInvG, 1)}</td>
             </tr>
             <tr>
               <td><span class="plat-dot" style="background:var(--meta)"></span>Meta Ads${aviso(d.avisoMeta)}</td>
-              <td class="r">${brl(t.invest)}</td><td class="r">${num(t.resultados)} conversas</td>
+              <td class="r">${brl(t.invest)}</td><td class="r">${plural(t.resultados, 'conversa', 'conversas')}</td>
               <td class="r">${brl(t.custo)}</td><td class="r">${pct(pInvM, 1)}</td>
             </tr>
           </tbody>
           <tfoot><tr>
             <td>Total Geral</td><td class="r">${brl(invest)}</td>
-            <td class="r">${num(Math.round(result))} resultados</td>
+            <td class="r">${plural(Math.round(result), 'resultado', 'resultados')}</td>
             <td class="r">${brl(invest / result)}</td><td class="r">100%</td>
           </tr></tfoot>
         </table></div>
@@ -266,6 +273,16 @@
           </div>
         </div>
       </div>
+`;
+
+    return `<section id="${m.id}-geral" class="sec on"><div class="wrap">
+      ${cabecalho(m, { eyebrow: d.eyebrow, titulo: 'Performance Geral', sub: d.sub })}
+      ${alertasHTML(d.alertas)}
+      ${kpisHTML(d.kpis, 'tc')}
+      ${ritmo}
+      ${momHTML(d.mom)}
+
+      ${comparativo}
 
       ${insights}
     </div></section>`;
@@ -285,7 +302,7 @@
         </div>
         ${tabelaGoogle(cs.slice().sort((a, b) => b.leads - a.leads))}
         ${barrasHTML('Investimento por Campanha', cs.map((c) => ({ nome: c.nome + (c.marca || ''), valor: c.invest })), 'google', (v) => brl(v, 0))}
-        ${barrasHTML('Leads por Campanha', cs.map((c) => ({ nome: c.nome + (c.marca || ''), valor: c.leads })), 'teal', (v) => num(Math.round(v)) + ' leads')}
+        ${barrasHTML('Leads por Campanha', cs.map((c) => ({ nome: c.nome + (c.marca || ''), valor: c.leads })), 'teal', (v) => plural(Math.round(v), 'lead', 'leads'))}
         ${notaHTML(m.google.nota)}
       </div>
     </div></section>`;
@@ -325,25 +342,29 @@
 
   /* ── montagem ────────────────────────────────────────────────────────── */
   function mesHTML(m, i) {
+    // só entram as abas que têm dado: um período sem Meta não mostra a aba de
+    // Meta, e "Todas as Campanhas" só existe quando há as duas plataformas
+    const abas = [{ id: 'geral', rotulo: 'Visão Geral', html: secGeral(m) }];
+    if (temGoogle(m)) abas.push({ id: 'google', rotulo: 'Google Ads', html: secGoogle(m) });
+    if (temMeta(m))   abas.push({ id: 'meta',   rotulo: 'Meta Ads',   html: secMeta(m) });
+    if (temGoogle(m) && temMeta(m)) abas.push({ id: 'todas', rotulo: 'Todas as Campanhas', html: secTodas(m) });
+
     return `<div id="report-${m.id}" class="relatorio-mes"${i === 0 ? '' : ' style="display:none"'}>
       <header class="hdr">
         <div class="hdr-row">
           <div class="brand"><div class="brand-dot"></div><span class="brand-name">${esc(RELATORIO.cliente)}</span></div>
           <span class="period-chip">${esc(m.periodo)}</span>
         </div>
-        <div class="tabs">
-          <button class="tab on" data-alvo="${m.id}-geral">Visão Geral</button>
-          <button class="tab" data-alvo="${m.id}-google">Google Ads</button>
-          <button class="tab" data-alvo="${m.id}-meta">Meta Ads</button>
-          <button class="tab" data-alvo="${m.id}-todas">Todas as Campanhas</button>
-        </div>
+        <div class="tabs">${abas.map((a, n) => `<button class="tab${n === 0 ? ' on' : ''}" data-alvo="${m.id}-${a.id}">${esc(a.rotulo)}</button>`).join('')}</div>
       </header>
-      ${secGeral(m)}${secGoogle(m)}${secMeta(m)}${secTodas(m)}
+      ${abas.map((a) => a.html).join('')}
     </div>`;
   }
 
   function render() {
     document.title = `Relatório de Performance — ${RELATORIO.cliente}`;
+    // com um período só, o seletor não tem o que selecionar
+    document.querySelector('.rpt-switch').style.display = RELATORIO.meses.length > 1 ? '' : 'none';
     document.getElementById('seletor-meses').innerHTML = RELATORIO.meses
       .map((m, i) => `<button class="rpt-switch-btn${i === 0 ? ' active' : ''}" data-mes="${m.id}">${esc(m.rotulo)}</button>`)
       .join('');

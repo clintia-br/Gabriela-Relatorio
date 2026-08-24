@@ -16,13 +16,19 @@ já funciona.
 
 ## Estrutura
 
-Um seletor de meses no topo troca entre os relatórios. Cada mês tem quatro abas:
+Um seletor de períodos no topo troca entre os relatórios (fica escondido
+enquanto houver só um). Cada período tem até quatro abas:
 
 - **Visão Geral** — KPIs consolidados, ritmo diário, comparativo entre
   plataformas, distribuição de verba e resultados, e os destaques do mês
 - **Google Ads** — KPIs, tabela de campanhas e gráficos de investimento e leads
 - **Meta Ads** — KPIs, tabela de campanhas e gráficos de investimento e conversas
 - **Todas as Campanhas** — as duas tabelas completas, lado a lado
+
+Abas sem dado não são renderizadas: um período só com Google não mostra a aba de
+Meta Ads, nem o comparativo entre plataformas nem a distribuição — que seriam
+100%/0% e não diriam nada. Os gráficos de barra só aparecem a partir de duas
+campanhas.
 
 ## O que é calculado e o que é escrito
 
@@ -100,6 +106,9 @@ são opcionais.
 Use **ponto** como separador decimal (`1723.80`), não vírgula. A formatação
 pt-BR é aplicada na hora de exibir.
 
+Campanha com zero conversões mostra `—` no CPL/CPR, em vez de `R$ 0,00` — que
+seria uma divisão por zero disfarçada de bom resultado.
+
 ### Blocos opcionais
 
 Todos podem ser omitidos:
@@ -107,8 +116,21 @@ Todos podem ser omitidos:
 - `geral.alertas` / `google.alertas` / `meta.alertas` — faixa colorida no topo
   da aba. `{ tipo: 'amber' | 'red' | 'green', icone: '📅', titulo, texto }`
 - `geral.mom` — faixa de quatro células comparando com o mês anterior
-- `geral.ritmoDiario` — tabela de investimento e resultados por dia, útil quando
-  o mês está parcial e não dá para comparar totais
+- `geral.ritmoDiario` — tabela de ritmo com colunas livres, útil para comparar
+  sub-períodos ou meses de tamanhos diferentes. A primeira coluna é o rótulo do
+  período; as demais vão alinhadas à direita:
+
+  ```js
+  ritmoDiario: {
+    titulo: 'Ritmo diário', chip: 'Google Ads',
+    colunas: ['Período', 'Dias', 'Invest./dia', 'Impr./dia', 'CTR'],
+    linhas: [
+      { celulas: ['25/07 – 16/08', '23', 'R$ 46,58', '119,6', '6,62%'] },
+      { celulas: ['17/08 – 23/08', '7', 'R$ 2,67', '13,1', '3,26%'], aviso: 'texto do ⚠' }
+    ],
+    total: { celulas: ['Período completo', '30', 'R$ 36,33', '94,8', '6,51%'] }
+  }
+  ```
 - `geral.avisoGoogle` / `geral.avisoMeta` — texto do ⚠ ao lado da plataforma no
   comparativo
 - `google.nota` / `meta.nota` — nota técnica no rodapé do card
